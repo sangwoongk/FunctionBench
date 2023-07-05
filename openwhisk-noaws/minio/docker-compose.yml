@@ -1,0 +1,11 @@
+version: '3'
+services:
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    container_name: minio
+    volumes:
+      - /tmp/openwhisk/minio:/data
+    ports:
+      - "9002:9000"
+      - "9003:9001"
