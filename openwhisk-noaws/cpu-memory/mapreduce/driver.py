@@ -5,6 +5,7 @@ from multiprocessing.dummy import Pool as ThreadPool
 import requests
 import urllib3
 import time
+import random
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -13,24 +14,60 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 # s3_client = boto3.client('s3')
 # lambda_client = boto3.client('lambda')
 
-wsk_host= "10.150.21.197"
+wsk_host= '10.150.3.42'
 access_key = ''
 secret_key = ''
 endpoint = ''
 
+def access_db(activ_id):
+    db_host = '10.150.3.42'
+    db_port = '5984'
+    db_usr = 'admin'
+    db_password = 'password'
+    url = f'http://{db_host}:{db_port}/whisk_local_activations/_find'
+
+    res = requests.post(url=url, json={
+        'selector': {
+            'activationId': activ_id
+        },
+        'fields': ['activationId', 'duration', 'annotations', 'response']
+	}, auth=(db_usr, db_password))
+
+    doc = json.loads(res.text)['docs']
+    return doc
+
+
+def check_activation(activ_id, wait, wait_time):
+    ret = None
+    start = time.time()
+    while True:
+        if time.time() - start > wait_time:
+            break
+
+        temp = access_db(activ_id)
+        if len(temp) == 0:
+            time.sleep(wait)
+        else:
+            ret = temp[0]
+            break
+
+    return ret
+
+
 def invoke(action, payload):
-    url = f"https://{wsk_host}/api/v1/namespaces/guest/actions/{action}?blocking=true"
+    url = f"https://{wsk_host}/api/v1/namespaces/guest/actions/{action}"
 
-    headers = {
-      'Content-Type': 'application/json',
-      'Authorization': 'Basic MjNiYzQ2YjEtNzFmNi00ZWQ1LThjNTQtODE2YWE0ZjhjNTAyOjEyM3pPM3haQ0xyTU42djJCS0sxZFhZRnBYbFBrY2NPRnFtMTJDZEFzTWdSVTRWck5aOWx5R1ZDR3VNREdJd1A='
-    }
-    response = requests.post(url, headers=headers, data=payload, verify=False)
+    wsk_auth = '23bc46b1-71f6-4ed5-8c54-816aa4f8c502:123zO3xZCLrMN6v2BKK1dXYFpXlPkccOFqm12CdAsMgRU4VrNZ9lyGVCGuMDGIwP'
+    auth = tuple(wsk_auth.split(':'))
+    response = requests.post(url=url, auth=auth, json=payload, params={'blocking': 'true'}, verify=False)
 
-    return response.json()['response']
+    return response.status_code, response.json()
+
+
 
 total_map = 0
 total_network = 0
+total_decode = 0
 
 
 def map_invoke_lambda(job_bucket, bucket, all_keys, batch_size, mapper_id):
@@ -40,9 +77,9 @@ def map_invoke_lambda(job_bucket, bucket, all_keys, batch_size, mapper_id):
         key += item + '/'
     key = key[:-1]
 
-    response = invoke(
+    status, response = invoke(
         action='mapper',
-        payload=json.dumps({
+        payload={
             "job_bucket": job_bucket,
             "bucket": bucket,
             "keys": key,
@@ -50,27 +87,41 @@ def map_invoke_lambda(job_bucket, bucket, all_keys, batch_size, mapper_id):
             "endpoint": endpoint,
             "access_key": access_key,
             "secret_key": secret_key
-        })
+        }
     )
 
-    json_data = response['result']
+    json_data = None
+    if status == 200:
+        json_data = response['response']['result']
+    elif status == 202:
+        data = check_activation(response['activationId'], 5, 300)
+        json_data = data['response']['result']
+    else:
+        print(f'status code: {status}')
+        return
 
-    global total_map, total_network
+    if json_data == None:
+        print(f'there is no activation!')
+        return
+
+    print(json_data)
+    global total_map, total_network, total_decode
     total_map += float(json_data['map'])
     total_network += float(json_data['network'])
+    total_decode += float(json_data['decode'])
 
 
 def reduce_invoke_lambda(job_bucket):
-    response = invoke(
+    _, response = invoke(
         action='reducer',
-        payload=json.dumps({
+        payload={
             "job_bucket": job_bucket,
             "endpoint": endpoint,
             "access_key": access_key,
             "secret_key": secret_key
-        })
+        }
     )
-    return response['result']
+    return response['response']['result']
 
 
 def main(args):
@@ -84,6 +135,11 @@ def main(args):
     secret_key = args['secret_key']
     endpoint = args['endpoint']
 
+    global total_map, total_network, total_decode
+    total_map = 0
+    total_network = 0
+    total_decode = 0
+
     minio_client = Minio(endpoint=endpoint,
                     access_key=access_key,
                     secret_key=secret_key,
@@ -93,16 +149,23 @@ def main(args):
     if not found:
         print(f'Bucket {src_bucket} does not exist!')
 
-    # Fetch all the keys
     all_data = []
-    for obj in minio_client.list_objects(bucket_name=src_bucket, recursive=True):
+    objects = list(minio_client.list_objects(bucket_name=src_bucket, recursive=True))
+
+    picks = None
+    if n_data == -1:
+        # Fetch all data
+        picks = objects
+    else:
+        # Pick n_data data randomly
+        picks = random.choices(objects, k=n_data)
+
+    for obj in picks:
         all_data.append(obj.object_name)
-        if len(all_data) == n_data:
-            break
 
 
     print("dataset file: " + str(len(all_data)))
-    print("data name: " + str(all_data))
+    # print("data name: " + str(all_data))
 
     print("# of Mappers: ", n_mapper)
     total_size = len(all_data)
@@ -113,8 +176,10 @@ def main(args):
     else:
         batch_size = int(total_size // n_mapper + 1)
 
+    '''
     for idx in range(n_mapper):
         print(f"mapper-{idx}: {all_data[idx * batch_size: (idx + 1) * batch_size]}")
+    '''
 
     pool = ThreadPool(n_mapper)
     invoke_lambda_partial = partial(map_invoke_lambda, job_bucket, src_bucket, all_data, batch_size)
@@ -130,15 +195,16 @@ def main(args):
             print(f"[*] Map Done : mapper {n_mapper} finished.")
             break
 
-    print("[*] Map Done - map : " + str(total_map) + " network : " + str(total_network))
+    print("[*] Map Done - map : " + str(total_map) + " network : " + str(total_network) + " decode : " + str(total_decode))
 
     # Reducer
     res = reduce_invoke_lambda(job_bucket)
     print("[*] Reduce Done : reducer finished.")
 
-    return {'map': f'map: {total_map}s, network: {total_network}s', 'reduce': f'reduce: {res["reduce"]}s, network: {res["reduce"]}s'}
+    return {'map': f'map: {total_map}s, network: {total_network}s, decode: {total_decode}s',
+            'reduce': f'reduce: {res["reduce"]}s, network: {res["network"]}s, decode: {res["decode"]}s'}
 
 
 if __name__ == '__main__':
-    main({'src_bucket': 'mapreduce', 'n_mapper': 10, 'n_data': 30, 'job_bucket': 'jobbucket',
+    main({'src_bucket': 'mapreduce', 'n_mapper': 10, 'n_data': 400, 'job_bucket': 'jobbucket',
         'endpoint': '10.150.21.197:9002', 'access_key': 'minioadmin', 'secret_key': 'minioadmin'})

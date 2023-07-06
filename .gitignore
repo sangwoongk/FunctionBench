@@ -1,2 +1,5 @@
 minio_config.json
 __pycache__/
+dataset/mapreduce/
+*.code-workspace
+.metals/

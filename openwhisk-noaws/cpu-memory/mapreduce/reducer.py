@@ -21,6 +21,7 @@ def main(args):
 
     network = 0
     reduce = 0
+    decode = 0
 
     minio_client = Minio(endpoint=endpoint,
                     access_key=access_key,
@@ -35,7 +36,7 @@ def main(args):
         raw = None
         try:
             response = minio_client.get_object(bucket_name=job_bucket, object_name=key)
-            raw = response.data.decode()
+            raw = response.data
         finally:
             response.close()
             response.release_conn()
@@ -43,7 +44,11 @@ def main(args):
         network += time() - start
 
         start = time()
-        data = json.loads(raw)
+        data = json.loads(raw.decode())
+
+        decode += time() - start
+
+        start = time()
         for key in data:
             output[key] += data[key]
         reduce += time() - start
@@ -51,7 +56,8 @@ def main(args):
     metadata = {
         'output': str(output),
         'network': str(network),
-        'reduce': str(reduce)
+        'reduce': str(reduce),
+        'decode': str(decode)
     }
 
     return metadata

@@ -32,6 +32,7 @@ def main(args):
 
     network = 0
     map = 0
+    decode = 0
     keys = src_keys.split('/')
 
     # Download and process all keys
@@ -41,15 +42,17 @@ def main(args):
         raw = None
         try:
             response = minio_client.get_object(bucket_name=src_bucket, object_name=key)
-            raw = response.data.decode()
+            raw = response.data
         finally:
             response.close()
             response.release_conn()
         network += time() - start
 
-        data = list(eval(raw))
         start = time()
+        data = list(eval(raw.decode()))
+        decode += time() - start
 
+        start = time()
         for line in data:
             text = line['text']
             for lang in computer_language:
@@ -58,20 +61,20 @@ def main(args):
 
         map += time() - start
 
-    print(output)
-
     metadata = {
         'output': str(output),
         'network': str(network),
-        'map': str(map)
+        'map': str(map),
+        'decode': str(decode)
     }
+    print(metadata)
 
     start = time()
     json_data = json.dumps(output).encode('utf-8')
     byte_data = io.BytesIO(json_data)
     minio_client.put_object(bucket_name=job_bucket, object_name=str(mapper_id), data=byte_data, length=-1, part_size=5*1024*1024, metadata=metadata)
     network += time() - start
-    
+
     return metadata
 
 if __name__ == '__main__':
