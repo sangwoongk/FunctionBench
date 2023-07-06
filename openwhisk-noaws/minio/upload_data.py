@@ -29,8 +29,10 @@ for file in os.listdir(img_dir):
 	path = f'{img_dir}/{file}'
 	client.fput_object(bucket_name=bucket_name, object_name=file, file_path=path)
 
+# dataset from https://www.kaggle.com/datasets/ltcmdrdata/plain-text-wikipedia-202011
 mapreduce_bucket = 'mapreduce'
-mapreduce_dir = '/data1/mapreduce/enwiki20201020'
+mapreduce_dir = '../../dataset/mapreduce/enwiki20201020'
+
 found = client.bucket_exists(mapreduce_bucket)
 if not found:
 	client.make_bucket(mapreduce_bucket)
@@ -40,3 +42,11 @@ else:
 for file in os.listdir(mapreduce_dir):
 	path = f'{mapreduce_dir}/{file}'
 	client.fput_object(bucket_name=mapreduce_bucket, object_name=file, file_path=path)
+
+# create bucket for mapreduce mappers
+job_bucket = 'jobbucket'
+found = client.bucket_exists(job_bucket)
+if not found:
+	client.make_bucket(job_bucket)
+else:
+	print(f'Bucket {job_bucket} already exists')

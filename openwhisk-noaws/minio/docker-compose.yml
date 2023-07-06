@@ -5,7 +5,7 @@ services:
     command: server /data --console-address ":9001"
     container_name: minio
     volumes:
-      - /tmp/openwhisk/minio:/data
+      - /data1/minio:/data
     ports:
       - "9002:9000"
       - "9003:9001"
