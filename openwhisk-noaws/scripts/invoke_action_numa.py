@@ -62,17 +62,17 @@ def invoke_action(action, params):
 	result = 'false'
 
 	response = requests.post(url=url, json=params, auth=auth, params={'blocking': blocking, 'result': result}, verify=False)
-	print(response.status_code)
+	print(f'response status: {response.status_code}')
 	resp_json = response.json()
 
 	return resp_json['activationId']
 
 
 '''
-	input[0]: n_mapper
-	input[1]: n_data
-	input[2]: src_bucket
-	input[3]: job_bucket
+	param[0]: n_mapper
+	param[1]: n_data
+	param[2]: src_bucket
+	param[3]: job_bucket
 '''
 def invoke_mapreduce(input):
 	params = {}
@@ -98,8 +98,35 @@ def invoke_mapreduce(input):
 
 	req_id = invoke_action('driver', params)
 	data = check_activation(req_id, 5, 300)
-	print(f'activationId: {data["activationId"]}, duration: {data["duration"]}, result: {data["response"]["result"]}')
+	ret = {
+		'activationId': data['activationId'],
+		'duration': data['duration'] / 1000,
+		'result': data['response']['result']
+	}
+	print(ret)
+	# print(f'activationId: {data["activationId"]}, duration: {data["duration"]/1000}s, result: {data["response"]["result"]}')
 
+
+def invoke_cnn():
+	params = {}
+	params['endpoint'] = '10.150.21.197:9002'
+	params['access_key'] = 'minioadmin'
+	params['secret_key'] = 'minioadmin'
+
+	params['input_bucket'] = 'openwhisk'
+	params['model_bucket'] = 'openwhisk'
+
+	params['input_name'] = 'animal-dog.jpg'
+	params['model_name'] = 'squeezenet_weights_tf_dim_ordering_tf_kernels.h5'
+
+	req_id = invoke_action('cnn', params)
+	data = check_activation(req_id, 5, 300)
+	ret = {
+		'activationId': data['activationId'],
+		'duration': data['duration'] / 1000,
+		'result': data['response']['result']
+	}
+	print(ret)
 
 '''
 	numa[0]: cpunode
@@ -131,3 +158,8 @@ if action_type == 'mapreduce':
 		change_numanode(numa, ['driver', 'mapper', 'reducer'])
 		time.sleep(5)
 	invoke_mapreduce(param)
+elif action_type == 'cnn':
+	if len(numa) != 0:
+		change_numanode(numa, ['cnn'])
+		time.sleep(5)
+	invoke_cnn()

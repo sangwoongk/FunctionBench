@@ -20,6 +20,8 @@ else:
 data_dir = '../../dataset'
 vid_dir = f'{data_dir}/video'
 img_dir = f'{data_dir}/image'
+model_dir = f'{data_dir}/model'
+review_dir = f'{data_dir}/amzn_fine_food_reviews'
 
 for file in os.listdir(vid_dir):
 	path = f'{vid_dir}/{file}'
@@ -29,6 +31,16 @@ for file in os.listdir(img_dir):
 	path = f'{img_dir}/{file}'
 	client.fput_object(bucket_name=bucket_name, object_name=file, file_path=path)
 
+for file in os.listdir(model_dir):
+	path = f'{model_dir}/{file}'
+	client.fput_object(bucket_name=bucket_name, object_name=file, file_path=path)
+
+for file in os.listdir(review_dir):
+	path = f'{review_dir}/{file}'
+	client.fput_object(bucket_name=bucket_name, object_name=file, file_path=path)
+
+
+'''
 # dataset from https://www.kaggle.com/datasets/ltcmdrdata/plain-text-wikipedia-202011
 mapreduce_bucket = 'mapreduce'
 mapreduce_dir = '../../dataset/mapreduce/enwiki20201020'
@@ -50,3 +62,4 @@ if not found:
 	client.make_bucket(job_bucket)
 else:
 	print(f'Bucket {job_bucket} already exists')
+'''
