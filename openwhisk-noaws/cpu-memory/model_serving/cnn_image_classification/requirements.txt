@@ -1,0 +1,4 @@
+tensorflow
+keras_applications
+minio
+pillow

@@ -16,7 +16,7 @@ sq1x1 = "squeeze1x1"
 exp1x1 = "expand1x1"
 exp3x3 = "expand3x3"
 relu = "relu_"
-tmp = "./"
+tmp = "/tmp/"
 WEIGHTS_PATH = "https://github.com/rcmalli/keras-squeezenet/releases/download/v1.0/squeezenet_weights_tf_dim_ordering_tf_kernels.h5"
 WEIGHTS_PATH_NO_TOP = "https://github.com/rcmalli/keras-squeezenet/releases/download/v1.0/squeezenet_weights_tf_dim_ordering_tf_kernels_notop.h5"
 
